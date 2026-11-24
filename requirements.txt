@@ -1,0 +1,10 @@
+livekit-agents[deepgram,silero,openai]~=1.2.0
+httpx
+python-dotenv>=1.0
+ddgs>=9.0
+tzdata
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+pyperclip
+python-docx
