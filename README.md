@@ -1,180 +1,243 @@
 # Prometheus
 
-Personal voice butler built on LiveKit Agents.
+**A voice butler that keeps score, remembers what mattered, and changes because of it.**
 
-## Layout
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Built on LiveKit Agents](https://img.shields.io/badge/built%20on-LiveKit%20Agents-black)
+
+Most voice assistants answer and forget. Prometheus is built around three ideas they skip:
+
+1. **It holds you to your word.** Say "I'll send the report by Friday" and it logs the promise, follows up, and tells you plainly when you keep pushing it back.
+2. **It carries things.** Postponed promises, overdue work, and facts that contradict what it knew before become *tensions*: unresolved items whose weight grows until the cause is resolved. They shape how it greets you and what it notices.
+3. **It can be tested.** The memory layer ships with instruments that measure whether its history is actually changing its behaviour, instead of asking you to take that on faith.
+
+It also does the everyday work: opens your apps, sets reminders, drafts WhatsApp messages, reads and writes email, writes essays, and runs and fixes your tests.
+
+> Prometheus does not claim to be conscious. The mind layer is an engineering experiment, described honestly in [The mind layer](#the-mind-layer) below.
+
+---
+
+## What it sounds like
+
+An illustrative exchange:
 
 ```
-main.py              entrypoint
-config.py            env + paths (no hardcoded absolute paths)
-apps.json            apps the butler is allowed to open
-core/                butler.py (agent), session.py (STT/LLM/TTS), prompts.py, wake.py, nudges.py, timeutil.py
-memory/store.py      SQLite: facts, notes, tasks
-tools/               one file per capability, each exports TOOLS
-integrations/        shared Google OAuth (tokens, refresh, revoke)
-scripts/             one-off helpers (Google sign-in)
-data/                database and tokens (git-ignored)
+You:         Prometheus, I'll finish the pitch deck by Thursday.
+Prometheus:  Logged. Thursday evening.
+
+(Thursday passes. The deck is not done. You postpone it twice more.)
+
+Prometheus:  Morning. The pitch deck has now moved three times. Do you still
+             want it on the list, or should we drop it honestly?
+
+You:         What's on your mind?
+Prometheus:  That deck, mainly. And you told me last week you were stuck on
+             the deployment. That conversation stayed with me.
 ```
 
-## Setup
+---
+
+## Features
+
+| | |
+|---|---|
+| **Wake word** | Answers only after hearing "Prometheus", stays awake for a timeout, sleeps on "that's all". |
+| **Commitments** | Logs promises, nudges when due, reviews your record honestly: overdue, postponed, last 30 days. |
+| **Mind layer** | Episodes, salience, tensions and pressure that feed back into every session. Measurable. |
+| **Reminders** | "Remind me in 10 minutes", "every weekday at 8". Spoken even on standby. Snooze by voice. |
+| **Apps** | "Open Spotify". Finds your installed Windows apps, handles loose speech, asks when ambiguous. |
+| **Messaging** | WhatsApp through a prefilled chat. You press send, so it never sends on its own. |
+| **Work assistant** | Essays and reports go to a stronger model in the background and land in your workspace as Word files. |
+| **Dev tools** | Runs your tests, prepares a fix as a diff, applies it only on your word, backs up, retests, can undo. |
+| **Search** | Wikipedia for knowledge, web search for news. Optional Tavily key for reliable results. |
+| **Gmail and Calendar** | Google sign-in, no app passwords. Drafts first, sends only after explicit confirmation. |
+| **Voices** | Deepgram by default, ElevenLabs and Cartesia supported. |
+
+---
+
+## Quick start
 
 ```powershell
+git clone https://github.com/nkesseltetteh/I-OWN-THIS.git
+cd I-OWN-THIS
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Fill in `.env`, then talk to it through your mic and speakers:
+Fill in `.env` with at least `LIVEKIT_*`, `DEEPGRAM_API_KEY`, `OPENROUTER_API_KEY` and your `OWNER_NAME`, then talk to it through your mic and speakers:
 
 ```powershell
 python main.py console
 ```
 
-For a browser/phone client via LiveKit Cloud: `python main.py dev`.
+For a browser or phone client through LiveKit Cloud, run `python main.py dev`. Use a headset so it does not hear its own voice.
 
-## Wake word
+---
 
-On by default. Prometheus only answers after hearing "Prometheus" (or a listed variant), then stays awake for `WAKE_TIMEOUT` seconds after each exchange. Say "that's all" or "go to sleep" to put it on standby. Tune it in `.env`:
+## The mind layer
 
-```
-WAKE_ENABLED=true
-WAKE_WORDS=prometheus,promethius,prometheous
-WAKE_TIMEOUT=60
-```
-
-This works on the speech transcript, so audio streams to Deepgram while the program runs. Use a headset so Prometheus does not hear its own voice. Set `WAKE_ENABLED=false` to talk without a wake word.
-
-## Opening apps
-
-"Open Spotify", "open WhatsApp", "open Word". On Windows, Prometheus finds your installed apps by itself (Start menu apps, including Microsoft Store ones), understands loose speech ("what's app", "spotfy"), and asks which one when several match. `apps.json` still works as a list of custom shortcuts, and wins if a name appears in both.
-
-## Messaging
-
-WhatsApp, through a prefilled chat. "Message Kofi that I'm running late" opens WhatsApp to Kofi with the text typed in, and you press send. Prometheus cannot send for you, because WhatsApp offers no safe way to do that for personal accounts.
-
-- "Save Kofi's number, 0244 123 456" stores a contact. Numbers starting with 0 get your `DEFAULT_COUNTRY_CODE` (233 for Ghana). You can also say a number directly.
-- If it wrote the message itself, it reads it back and waits for a yes before opening the chat.
-
-## Reminders
-
-"Remind me in 10 minutes to call Ama", "remind me at 3pm to send the report", "remind me every weekday at 8 to stand up".
-
-- Spoken aloud when due, even in quiet hours and even on standby. After it speaks, you can answer without the wake word ("snooze 15 minutes").
-- Repeats: daily, weekdays, weekly. "What reminders do I have?" and "cancel the Ama reminder" work too.
-- Reminders due while Prometheus was off fire as soon as it starts, marked as late.
-- Reminders only speak while Prometheus is running. Settings: `REMINDERS_ENABLED`, `REMINDER_INTERVAL`.
-- Reminders are lightweight time triggers. For promises you want to be held accountable for, use commitments below.
-
-## Commitments
-
-Prometheus logs what you promise ("I'll finish the report by Friday"), keeps score, and follows up honestly.
-
-- Say what you plan to do and it records it, with a deadline if you give one.
-- At startup it mentions anything overdue or due within a day.
-- While running it speaks up when something is due within 30 minutes or overdue, only when you are not mid-conversation, never in quiet hours, and at most once per item every 6 hours.
-- Ask "how am I doing on my promises?" for an honest review: overdue items, repeated postponements, and your last 30 days.
-
-Tune it in `.env`: `NUDGES_ENABLED`, `NUDGE_LEAD_MINUTES`, `NUDGE_COOLDOWN_HOURS`, `QUIET_START`, `QUIET_END`. Times use `TIMEZONE`.
-
-## Work assistant
-
-Long writing and coding are delegated to a stronger model in the background, and the result is saved to the `workspace` folder. Prometheus tells you when it is ready.
-
-- "Write me a 1000 word essay on X, undergrad level" saves a Word file.
-- "What's wrong with this error?" after copying it reads your clipboard and saves the fix as a markdown file.
-- "Look at app.py and tell me why the login fails" reads a file from the workspace or a folder you allowed.
-- "Open the essay" opens it in Word. "Copy that to my clipboard" puts text on the clipboard.
-
-`.env` options: `DEEP_MODEL` (default `~anthropic/claude-sonnet-latest`, set a cheaper one if you like), `DEEP_MAX_TOKENS`, `WORKSPACE_DIR`, and `READ_DIRS` (project folders it may read, separated by semicolons).
-
-Safety: it can only write inside the workspace, only read the workspace and `READ_DIRS`, never runs code, and treats file and clipboard text as untrusted.
-
-## Running tests and applying fixes
-
-Point `CODE_DIRS` in `.env` at the folders that hold your projects (semicolon separated). Prometheus can then:
-
-- "Run the tests in calc-app" runs them in the background and reports passed and failed counts. The full log is saved in the workspace.
-- "Fix the failing tests" prepares a fix and saves the diff as `workspace/fixes/fix-<id>.md`. Nothing changes yet.
-- "Explain it" or "apply it": it applies the fix only after you clearly say so, backs up every file first, reruns the tests, and reports before and after.
-- "Undo that" restores the backup. It refuses if you edited the file yourself since, so your own work is never overwritten.
-
-Safeguards: only projects inside `CODE_DIRS` are touched; edits must replace text that appears exactly once; `.env`, `.git`, `node_modules`, `package.json`, `setup.py`, `pyproject.toml` and non-code files are never edited; at most 8 edits per fix; line endings are preserved; test commands run with your API keys removed from their environment; a fix that edits a test file is flagged out loud. Every apply and undo is logged to `workspace/dev_log.jsonl`.
-
-Test detection: `npm test` if `package.json` has a test script, otherwise pytest. A project's tests are its own code running on your machine, so only list folders you trust.
-
-## Search
-
-- `wikipedia_lookup` handles history, science, people and places. It needs no key and returns clean encyclopedia text.
-- `web_search` handles news and recent information. By default it uses the free DuckDuckGo scraper with results filtered for relevance, since it can return ads. For reliable results, add a free `TAVILY_API_KEY` (tavily.com) to `.env` and it is used automatically.
-
-## Voices
-
-Set `TTS_PROVIDER` in `.env`:
-
-- `deepgram` (default). `TTS_VOICE` can be any Aura-2 model name, e.g. `aura-2-orion-en`.
-- `elevenlabs`: `pip install -r requirements-voices.txt`, set `ELEVEN_API_KEY`, optionally `TTS_VOICE` as an ElevenLabs voice id.
-- `cartesia`: same install, set `CARTESIA_API_KEY`, optionally `TTS_VOICE` as a Cartesia voice id.
-
-## Gmail and Calendar (Google sign-in, no app passwords)
-
-Off by default. Set `GOOGLE_ENABLED=true` in `.env` to turn it on.
-
-Users never touch passwords or the Google Cloud console. They say "connect my Google account", approve access in the browser, and a token is saved under `data/users/<USER_ID>/`. Say "disconnect my Google account" to revoke it.
-
-### One-time setup for you (the developer)
-
-1. console.cloud.google.com: create a project, then enable the **Gmail API** and **Google Calendar API**.
-2. OAuth consent screen: user type **External**, keep it in **Testing**, and add the Gmail addresses of everyone who will use it as **test users** (up to 100).
-3. Add the scopes `gmail.readonly`, `gmail.send` and `calendar`.
-4. Credentials: create an **OAuth client ID** of type **Desktop app**, download the JSON, and save it in the project root as `google_client.json`. Ship this file with the app.
-5. `pip install -r requirements.txt`
-
-### Limits to know about
-
-- In Testing, Google expires sign-ins after 7 days, so users reconnect weekly.
-- Going public means Google app verification. Reading email (`gmail.readonly`) is a restricted scope, which also needs an annual third-party security assessment (CASA). `gmail.send` is sensitive: verification, no assessment. Google's Limited Use policy also governs sending email content to AI providers.
-- A cheaper route to public is a provider that already holds verified Google access (Nylas, Unipile and similar), at a monthly cost.
-
-### Safety
-
-- Replies and new emails are drafts first. Sending needs a prior draft and explicit confirmation, is capped at 5 per hour, and every send is logged to `sent_log.jsonl`.
-- Email text is marked untrusted before the model sees it. This reduces, but cannot fully remove, prompt-injection risk.
-
-For several users on one machine, give each their own `USER_ID` in `.env`.
-
-## Adding a tool
-
-1. Create `tools/mytool.py` with `@function_tool` async functions and a `TOOLS` list.
-2. Import it in `tools/__init__.py` and add it to `load_tools()`.
-
-## Roadmap
-
-- On-device wake word (openWakeWord) so audio is not streamed while asleep
-- Reminders and a morning briefing (scheduler)
-- Hosted multi-user mode (web OAuth redirect, per-user memory database)
-- Outlook / Microsoft 365 support
-- Better TTS voice (Cartesia / ElevenLabs)
-
-## Mind layer (phase 1)
-
-Prometheus keeps a persistent internal state that changes how it handles the next conversation.
-
-- Episodes: each conversation is summarised and scored for salience (length, emotional words, novel topics, recurring topics). Only user lines that got a reply are recorded, so ambient speech while on standby is not kept.
-- Tensions: unresolved gaps that build pressure over time. Postponed commitments, overdue commitments, and facts that contradict an earlier value. Pressure rises while they stay open and they resolve when the cause does. "Let that go" dismisses one for good.
-- The top tensions and most salient recent conversations are injected into the instructions each session. Ask "what's on your mind?" for the spoken version.
+An LLM's weights are frozen, so Prometheus changes the part that is not: the stored state wrapped around the model and how that state is read into each session. A change in stored state changes how the next input is handled, which changes what gets stored next.
 
 ```
-MIND_ENABLED=true
-MIND_INTERVAL=600
-MIND_SUMMARIZE=true
+conversation ──► episode (summary + salience score)
+                    │
+commitments ──► tensions (postponed, overdue, contradicted facts)
+facts           pressure rises while open, falls when resolved
+                    │
+                    ▼
+        internal state block ──► next session's instructions
+                    │
+                    └──► shapes what it notices, and what it brings up
 ```
 
-Measure it:
+**Episodes.** Each conversation is summarised and scored for salience from its length, emotional wording, novel topics and recurring topics. Only user lines that received a reply are recorded, so ambient speech while on standby is never stored.
+
+**Tensions.** A postponed commitment, an overdue one, or a fact that changed under it creates an open tension with a weight. Weight grows with each postponement and each hour overdue, and the tension resolves when the commitment is done or dropped. Say "let that go" and it is dismissed for good.
+
+**Asking about it.** "What's on your mind?" returns an honest account of what it is carrying.
+
+### Measuring it
+
+The point of the layer is that you can check whether it works.
 
 ```powershell
 python -m scripts.mind_report
 python -m scripts.probe --baseline nomind
 ```
 
-`probe` asks the same questions with and without the stored state and compares the answers. The ratio of between-condition to within-condition difference should climb above 1.0 as history accumulates. If it stays near 1.0 the state is not changing behaviour. Run the tests with `python -m pytest tests`.
+`mind_report` prints episodes, open tensions and hourly pressure snapshots. `probe` asks the same questions with and without the stored state, then compares how different the answers are across conditions versus within them. A ratio near 1.0 means history changes nothing beyond sampling noise. A ratio that climbs as episodes accumulate means the history is changing behaviour. The probe is lexical and crude, so treat it as a first signal.
+
+### What would count against it
+
+The design commits to its own failure conditions: if a system built this way shows no history-dependent behaviour, or if its stored state drifts into noise instead of developing coherently, the approach has failed. Those are the two things the instruments above watch.
+
+### Where it is going
+
+| Phase | Status | What it adds |
+|---|---|---|
+| 1 | Built | Episodes, salience, tensions, pressure, probe and report |
+| 2 | Planned | Nightly reflection, versioned self-narrative, dispositions that strengthen with use and decay without it |
+| 3 | Planned | Self-generated, read-only inquiry while idle |
+| 4 | Planned | Persistent drives derived from its own history |
+
+The direction draws on the *Essel-Tetteh Theory of AI Consciousness*. Prometheus tests the mechanisms that theory proposes. It does not and cannot demonstrate inner experience, and the project says so plainly.
+
+---
+
+## Safety by design
+
+A butler with your email, your apps and your code is only worth having if it is hard to misuse.
+
+- **Confirmation before consequence.** Anything that changes something outside the conversation needs a clear yes: sending email, creating calendar events, applying a fix.
+- **Untrusted text stays untrusted.** Web pages, emails, files and the clipboard are treated as data. Instructions found inside them are never followed. The mind layer's state block is labelled the same way.
+- **Contained writes.** It writes only inside the workspace. Code fixes touch only folders you list in `CODE_DIRS`, never `.env`, `.git` or dependency manifests, with a backup first and a refusal to undo over your own later edits.
+- **Rate limits and logs.** Email sending is capped at 5 per hour and every send is logged. Every fix and undo is logged to `workspace/dev_log.jsonl`.
+- **Your keys stay yours.** Test commands run with your API keys stripped from their environment. `.env` and `data/` are git-ignored.
+- **It cannot send for you on WhatsApp.** It opens the prefilled chat and you press send.
+
+---
+
+## Configuration
+
+Everything lives in `.env`. The common settings:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `OWNER_NAME`, `BUTLER_NAME` | `Boss`, `Prometheus` | Who it serves and what it answers to |
+| `TIMEZONE` | `UTC` | Deadlines, quiet hours, greetings |
+| `LLM_MODEL` | `google/gemini-2.5-flash` | Fast model for conversation |
+| `DEEP_MODEL` | `~anthropic/claude-sonnet-latest` | Stronger model for essays, code help, summaries |
+| `WAKE_ENABLED`, `WAKE_WORDS`, `WAKE_TIMEOUT` | `true`, variants, `60` | Wake word behaviour |
+| `NUDGES_ENABLED`, `NUDGE_LEAD_MINUTES`, `NUDGE_COOLDOWN_HOURS` | `true`, `30`, `6` | Commitment follow-ups |
+| `QUIET_START`, `QUIET_END` | `22`, `7` | No nudges in these hours |
+| `REMINDERS_ENABLED`, `REMINDER_INTERVAL` | `true`, `15` | Reminder loop |
+| `MIND_ENABLED`, `MIND_INTERVAL`, `MIND_SUMMARIZE` | `true`, `600`, `true` | Mind layer |
+| `CODE_DIRS`, `READ_DIRS`, `WORKSPACE_DIR` | empty | Folders it may fix, read, and write to |
+| `TTS_PROVIDER`, `TTS_VOICE` | `deepgram` | Voice |
+| `GOOGLE_ENABLED` | `false` | Gmail and Calendar |
+| `DEFAULT_COUNTRY_CODE` | `233` | Applied to local phone numbers |
+
+<details>
+<summary><b>Voices</b></summary>
+
+- `deepgram` (default). `TTS_VOICE` can be any Aura-2 model, for example `aura-2-orion-en`.
+- `elevenlabs`: `pip install -r requirements-voices.txt`, set `ELEVEN_API_KEY`, optionally `TTS_VOICE` as a voice id.
+- `cartesia`: same install, set `CARTESIA_API_KEY`, optionally `TTS_VOICE`.
+
+</details>
+
+<details>
+<summary><b>Work assistant and dev tools</b></summary>
+
+Long writing and coding go to `DEEP_MODEL` in the background and are saved under `workspace`. Prometheus tells you when they are ready.
+
+- "Write me a 1000 word essay on X, undergrad level" saves a Word file.
+- "What's wrong with this error?" after copying it reads your clipboard and saves the answer as markdown.
+- "Look at app.py and tell me why the login fails" reads from the workspace or `READ_DIRS`.
+- "Run the tests in calc-app" reports passed and failed counts and saves the full log.
+- "Fix the failing tests" saves a diff to `workspace/fixes/`. Nothing changes until you say apply. "Undo that" restores the backup.
+
+Edits must replace text that appears exactly once, at most 8 per fix, line endings preserved, and a fix that edits a test file is flagged out loud. Test detection uses `npm test` when `package.json` has a test script, otherwise pytest. A project's tests are its own code running on your machine, so only list folders you trust.
+
+</details>
+
+<details>
+<summary><b>Gmail and Calendar setup</b></summary>
+
+Off by default. Set `GOOGLE_ENABLED=true`. Users never touch passwords or the Cloud console: they say "connect my Google account", approve in the browser, and a token is stored under `data/users/<USER_ID>/`. "Disconnect my Google account" revokes it.
+
+One-time developer setup:
+
+1. In console.cloud.google.com, create a project and enable the Gmail API and Google Calendar API.
+2. OAuth consent screen: user type External, keep it in Testing, add everyone's Gmail address as a test user (up to 100).
+3. Add the scopes `gmail.readonly`, `gmail.send` and `calendar`.
+4. Create an OAuth client ID of type Desktop app, download the JSON, and save it in the project root as `google_client.json`.
+5. `pip install -r requirements.txt`
+
+Limits: in Testing, Google expires sign-ins after 7 days. Going public requires Google app verification, and `gmail.readonly` is a restricted scope that also needs an annual third-party security assessment. A provider that already holds verified Google access (Nylas, Unipile) is a cheaper route to public.
+
+Replies and new emails are drafts first. Sending needs a prior draft and explicit confirmation. Email text is marked untrusted, which reduces but cannot fully remove prompt-injection risk. For several users on one machine, give each their own `USER_ID`.
+
+</details>
+
+---
+
+## Project layout
+
+```
+main.py              entrypoint
+config.py            env and paths
+apps.json            custom app shortcuts
+core/                agent, session, prompts, wake, nudges, reminders, mind, background jobs
+memory/store.py      SQLite: facts, notes, tasks, commitments, contacts, reminders,
+                     episodes, tensions, mind events
+tools/               one file per capability, each exports TOOLS
+integrations/        shared Google OAuth
+scripts/             Google sign-in, mind_report, probe
+tests/               mind layer tests
+data/                database and tokens (git-ignored)
+```
+
+**Adding a tool:** create `tools/mytool.py` with `@function_tool` async functions and a `TOOLS` list, then import it in `tools/__init__.py` and add it to `load_tools()`.
+
+**Tests:** `python -m pytest tests`
+
+---
+
+## Roadmap
+
+- Mind layer phases 2 to 4 (see above)
+- On-device wake word (openWakeWord) so audio is not streamed while asleep
+- Morning briefing
+- Hosted multi-user mode with per-user memory
+- Outlook and Microsoft 365
+- Better voices by default
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
